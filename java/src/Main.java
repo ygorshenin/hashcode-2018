@@ -26,7 +26,7 @@ public class Main {
             FastScanner in = new FastScanner(inputStream);
             PrintWriter out = new PrintWriter(outputStream);
             SelfDrivingRides solver = new SelfDrivingRides();
-            solver.greedy(1, in, out);
+            solver.greedy(testName, in, out);
             out.close();
         }
     }

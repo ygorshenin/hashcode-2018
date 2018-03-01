@@ -15,14 +15,14 @@ class SelfDrivingRides {
     int[] earliestStart;
     int[] latestFinish;
     int[] travelTime;
-    Set<Integer>[] assignment;
+    List<Integer>[] assignment;
 
-    public void greedy(int testNumber, FastScanner in, PrintWriter out) {
+    public void greedy(String testName, FastScanner in, PrintWriter out) {
         readInput(in);
 
-        assignment = new Set[n];
+        assignment = new List[n];
         for (int i = 0; i < n; i++) {
-            assignment[i] = new TreeSet<>();
+            assignment[i] = new ArrayList<>();
         }
 
         greedy();
@@ -35,7 +35,7 @@ class SelfDrivingRides {
             out.println();
         }
 
-        System.out.println(T);
+        printStats(testName);
     }
 
     private void greedy() {
@@ -52,7 +52,7 @@ class SelfDrivingRides {
             int id = rideOrder[rideIt];
             int best = -1;
             for (int i = 0; i < n; i++) {
-                if (carBecomesFree[i] + dist(sr[id], sc[id], carR[i], carC[i]) + travelTime[id] <= latestFinish[id]
+                if (carBecomesFree[i] + dist(carR[i], carC[i], sr[id], sc[id]) + travelTime[id] <= latestFinish[id]
                         && (best < 0 || carBecomesFree[best] > carBecomesFree[i])) {
                     best = i;
                 }
@@ -62,7 +62,8 @@ class SelfDrivingRides {
             }
             int i = best;
             assignment[i].add(id);
-            int t = Math.max(earliestStart[id], carBecomesFree[i] + dist(sr[id], sc[id], carR[i], carC[i]));
+            int t = Math.max(earliestStart[id], carBecomesFree[i] + dist(carR[i], carC[i], sr[id], sc[id]));
+//            System.out.println(carBecomesFree[i] + " " + (t + travelTime[id]));
             carBecomesFree[i] = t + travelTime[id];
             carR[i] = fr[id];
             carC[i] = fc[id];
@@ -72,6 +73,55 @@ class SelfDrivingRides {
     private int dist(int r1, int c1, int r2, int c2) {
         return Math.abs(r1 - r2) + Math.abs(c1 - c2);
     }
+
+    private void printStats(String testName) {
+        System.out.println(testName);
+        int totalRides = 0;
+        for (int i = 0; i < n; i++) {
+            totalRides += assignment[i].size();
+        }
+        int score = calcScore();
+        int bestScore = calcBestPossibleScore();
+        System.out.printf("Score: %d (%.2f%%)\n", score, 100.0 * score / bestScore);
+        System.out.printf("Best possible score: %d\n", bestScore);
+        System.out.printf("Assigned rides: %d/%d\n", totalRides, k);
+        System.out.println();
+    }
+
+    private int calcScore() {
+        int res = 0;
+        for (int i = 0; i < n; i++) {
+            int r = 0;
+            int c = 0;
+            int t = 0;
+            for (int id : assignment[i]) {
+                int nt = Math.max(earliestStart[id], t + dist(r, c, sr[id], sc[id]));
+                if (nt == earliestStart[id]) {
+                    res += bonus;
+                }
+                if (nt + travelTime[id] > latestFinish[id]) {
+                    throw new AssertionError();
+                }
+                t = nt + travelTime[id];
+                r = fr[id];
+                c = fc[id];
+                res += travelTime[id];
+            }
+        }
+        return res;
+    }
+
+    private int calcBestPossibleScore() {
+        long res = 0;
+        for (int i = 0; i < k; i++) {
+            res += travelTime[i] + bonus;
+        }
+        if (res > Integer.MAX_VALUE) {
+            throw new AssertionError();
+        }
+        return (int)res;
+    }
+
 
     private void readInput(FastScanner in) {
         height = in.nextInt();

@@ -52,18 +52,20 @@ class SelfDrivingRides {
             int id = rideOrder[rideIt];
             int best = -1;
             for (int i = 0; i < n; i++) {
-                if (carBecomesFree[i] + dist(sr[id], sc[id], carR[i], carC[i]) <= earliestStart[id]) {
+                if (carBecomesFree[i] + dist(sr[id], sc[id], carR[i], carC[i]) + travelTime[id] <= latestFinish[id]
+                        && (best < 0 || carBecomesFree[best] > carBecomesFree[i])) {
                     best = i;
                 }
             }
             if (best < 0) {
                 continue;
             }
-            assignment[best].add(id);
-            int t = earliestStart[id];
-            carBecomesFree[best] = t + travelTime[id];
-            carR[best] = fr[id];
-            carC[best] = fc[id];
+            int i = best;
+            assignment[i].add(id);
+            int t = Math.max(earliestStart[id], carBecomesFree[i] + dist(sr[id], sc[id], carR[i], carC[i]));
+            carBecomesFree[i] = t + travelTime[id];
+            carR[i] = fr[id];
+            carC[i] = fc[id];
         }
     }
 

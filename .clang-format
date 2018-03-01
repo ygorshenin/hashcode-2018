@@ -1,0 +1,7 @@
+Language: Java
+BasedOnStyle: Google
+AllowShortLoopsOnASingleLine: false
+
+Language: Cpp
+BasedOnStyle: Chromium
+AccessModifierOffset: -2

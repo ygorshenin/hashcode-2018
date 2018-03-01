@@ -1,4 +1,5 @@
 import java.io.*;
+import java.util.Locale;
 
 public class Main {
     public static void main(String[] args) {
@@ -10,6 +11,8 @@ public class Main {
                 "e_high_bonus",
         };
 
+        int totalScore = 0;
+        int bestPossibleScore = 0;
         for (String testName : testNames) {
             InputStream inputStream;
             try {
@@ -26,9 +29,14 @@ public class Main {
             FastScanner in = new FastScanner(inputStream);
             PrintWriter out = new PrintWriter(outputStream);
             SelfDrivingRides solver = new SelfDrivingRides();
-            solver.greedy(testName, in, out);
+            int[] scores = solver.solve(testName, in, out);
+            totalScore += scores[0];
+            bestPossibleScore += scores[1];
             out.close();
         }
+        Locale.setDefault(Locale.UK);
+//        System.out.println(bestPossibleScore);
+        System.out.printf("Total score: %.2fM (%.2f%%)\n", totalScore * 1e-6, 100.0 * totalScore / bestPossibleScore);
     }
 }
 

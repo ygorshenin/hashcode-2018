@@ -55,16 +55,17 @@ class SelfDrivingRides {
             latestStart[i] = latestFinish[i] - travelTime[i];
         }
         Arrays.sort(rideOrder, (u, v) -> (earliestStart[u] - earliestStart[v]));
+
         if (bonus < 100) {
 //            Arrays.sort(rideOrder, (u, v) -> (latestStart[u] - latestStart[v]));
 
             int[] score = new int[k];
             for (int i = 0; i < k; i++) {
-//                score[i] = 20*latestStart[i] - travelTime[i];
+//                score[i] = latestStart[i] - travelTime[i];
                 score[i] = latestStart[i];
 //                score[i] = -travelTime[i];
             }
-            Arrays.sort(rideOrder, (u, v) -> (score[u] - score[v]));
+//            Arrays.sort(rideOrder, (u, v) -> (score[u] - score[v]));
         }
 //        Arrays.sort(rideOrder, (u, v) -> (timeRange[u] - timeRange[v]));
 
@@ -77,9 +78,9 @@ class SelfDrivingRides {
         int[] timeToReach = new int[n];
         for (int rideIt = 0; rideIt < k; rideIt++) {
             int id = rideOrder[rideIt];
-//            if (travelTime[id] < sortedTravelTimes[(int)(k * 0.40)]) {
+            if (travelTime[id] < sortedTravelTimes[(int)(k * 0.02)]) {
 //                continue;
-//            }
+            }
             List<Integer> candidates = new ArrayList<>();
             for (int i = 0; i < n; i++) {
                 int sectorR = getSector(sr[id], height);

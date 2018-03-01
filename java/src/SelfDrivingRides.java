@@ -14,34 +14,61 @@ class SelfDrivingRides {
     int[] fc;
     int[] earliestStart;
     int[] latestFinish;
-    Set<Integer>[] rides;
+    int[] travelTime;
+    Set<Integer>[] assignment;
 
-    public void solve(int testNumber, FastScanner in, PrintWriter out) {
+    public void greedy(int testNumber, FastScanner in, PrintWriter out) {
         readInput(in);
 
-        rides = new Set[n];
+        assignment = new Set[n];
         for (int i = 0; i < n; i++) {
-            rides[i] = new TreeSet<>();
+            assignment[i] = new TreeSet<>();
         }
 
-
-        Ride[] allRides = new Ride[k];
-        for (int i = 0; i < k; i++) {
-            allRides[i] = new Ride();
-            allRides[i].id = i;
-            allRides[i].offset = -1;
-        }
-        for (int i = 0; i < n; i++) {
-            rides[i].add(i);
-        }
+        greedy();
 
         for (int i = 0; i < n; i++) {
-            out.print(rides[i].size());
-            for (int x : rides[i]) {
+            out.print(assignment[i].size());
+            for (int x : assignment[i]) {
                 out.print(" " + x);
             }
             out.println();
         }
+
+        System.out.println(T);
+    }
+
+    private void greedy() {
+        Integer[] rideOrder = new Integer[k];
+        for (int i = 0; i < k; i++) {
+            rideOrder[i] = i;
+        }
+        Arrays.sort(rideOrder, (u, v) -> (earliestStart[u] - earliestStart[v]));
+
+        int[] carR = new int[n];
+        int[] carC = new int[n];
+        int[] carBecomesFree = new int[n];
+        for (int rideIt = 0; rideIt < k; rideIt++) {
+            int id = rideOrder[rideIt];
+            int best = -1;
+            for (int i = 0; i < n; i++) {
+                if (carBecomesFree[i] + dist(sr[id], sc[id], carR[i], carC[i]) <= earliestStart[id]) {
+                    best = i;
+                }
+            }
+            if (best < 0) {
+                continue;
+            }
+            assignment[best].add(id);
+            int t = earliestStart[id];
+            carBecomesFree[best] = t + travelTime[id];
+            carR[best] = fr[id];
+            carC[best] = fc[id];
+        }
+    }
+
+    private int dist(int r1, int c1, int r2, int c2) {
+        return Math.abs(r1 - r2) + Math.abs(c1 - c2);
     }
 
     private void readInput(FastScanner in) {
@@ -58,6 +85,7 @@ class SelfDrivingRides {
         fc = new int[k];
         earliestStart = new int[k];
         latestFinish = new int[k];
+        travelTime = new int[k];
         for (int i = 0; i < k; i++) {
             sr[i] = in.nextInt();
             sc[i] = in.nextInt();
@@ -65,15 +93,7 @@ class SelfDrivingRides {
             fc[i] = in.nextInt();
             earliestStart[i] = in.nextInt();
             latestFinish[i] = in.nextInt();
-        }
-    }
-
-    class Ride implements Comparable<Ride> {
-        int id; // Global id.
-        int offset; // In its car list.
-
-        public int compareTo(Ride o) {
-            return id - o.id;
+            travelTime[i] = dist(sr[i], sc[i], fr[i], fc[i]);
         }
     }
 

@@ -63,7 +63,7 @@ class SelfDrivingRides {
         int score = calcScore();
 
         for (int mode = 0; mode < 2; mode++) {
-            for (int step = 0; step < 3; step++) {
+            for (int step = 0; step < 10; step++) {
                 Integer[] oldOrder = rideOrder.clone();
                 List<Integer>[] oldAssignment = new List[n];
                 for (int i = 0; i < n; i++) {
@@ -90,9 +90,9 @@ class SelfDrivingRides {
                         int id = rideOrder[rideIt];
                         List<Integer> candidates = new ArrayList<>();
                         for (int i = 0; i < n; i++) {
-//                            if (travelTime[id] > sortedTravelTimes[(int) (k * 0.96)] != i < 90) {
-//                                continue;
-//                            }
+                            if (travelTime[id] > sortedTravelTimes[(int) (k * 0.97)] != i < 70) {
+                                continue;
+                            }
                             timeToReach[i] = carBecomesFree[i] + dist(carR[i], carC[i], sr[id], sc[id]);
                             if (timeToReach[i] + travelTime[id] <= latestFinish[id]) {
                                 candidates.add(i);
@@ -123,10 +123,11 @@ class SelfDrivingRides {
                                 if (dead[id]) {
                                     continue;
                                 }
-//                                if (travelTime[id] > sortedTravelTimes[(int) (k * 0.96)] && i > 90) {
+//                                if (travelTime[id] > sortedTravelTimes[(int) (k * 0.96)] != i < 90) {
 //                                    continue;
 //                                }
-                                if (t + dist(r, c, sr[id], sc[id]) + travelTime[id] > latestFinish[id]) {
+                                int nt = Math.max(earliestStart[id], t + dist(r, c, sr[id], sc[id]));
+                                if (nt + travelTime[id] > latestFinish[id]) {
                                     continue;
                                 }
                                 if (best < 0 || dist(r, c, sr[best], sc[best]) > dist(r, c, sr[id], sc[id])) {
@@ -139,7 +140,11 @@ class SelfDrivingRides {
                             int id = best;
                             assignment[i].add(id);
                             dead[id] = true;
-                            t = Math.max(earliestStart[id], t + dist(r, c, sr[id], sc[id]) + travelTime[id]);
+                            int nt = Math.max(earliestStart[id], t + dist(r, c, sr[id], sc[id]));
+                            t = nt + travelTime[id];
+                            if (t > latestFinish[id]) {
+                                throw new AssertionError(t);
+                            }
                             r = fr[id];
                             c = fc[id];
                         }
@@ -233,6 +238,7 @@ class SelfDrivingRides {
             }
             if (nt + travelTime[id] > latestFinish[id]) {
                 return -infinity;
+//                throw new AssertionError(nt);
             }
             t = nt + travelTime[id];
             r = fr[id];

@@ -36,6 +36,7 @@ public class Main {
             out.close();
         }
 //        System.out.println(bestPossibleScore);
+//        System.out.println(totalScore);
         System.out.printf("Total score: %.2fM (%.2f%%)\n", totalScore * 1e-6, 100.0 * totalScore / bestPossibleScore);
     }
 }

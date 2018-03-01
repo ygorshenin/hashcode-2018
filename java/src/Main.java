@@ -5,11 +5,11 @@ public class Main {
     public static void main(String[] args) {
         Locale.setDefault(Locale.UK);
         final String[] testNames = {
-//                "a_example",
-//                "b_should_be_easy",
+                "a_example",
+                "b_should_be_easy",
                 "c_no_hurry",
-//                "d_metropolis",
-//                "e_high_bonus",
+                "d_metropolis",
+                "e_high_bonus",
         };
 
         int totalScore = 0;

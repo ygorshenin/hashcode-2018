@@ -54,63 +54,65 @@ class SelfDrivingRides {
         for (int i = 0; i < k; i++) {
             latestStart[i] = latestFinish[i] - travelTime[i];
         }
-        Arrays.sort(rideOrder, (u, v) -> (earliestStart[u] - earliestStart[v]));
 
-        if (bonus < 100) {
-//            Arrays.sort(rideOrder, (u, v) -> (latestStart[u] - latestStart[v]));
-
-            int[] score = new int[k];
-            for (int i = 0; i < k; i++) {
-//                score[i] = latestStart[i] - travelTime[i];
-                score[i] = latestStart[i];
-//                score[i] = -travelTime[i];
-            }
-//            Arrays.sort(rideOrder, (u, v) -> (score[u] - score[v]));
-        }
-//        Arrays.sort(rideOrder, (u, v) -> (timeRange[u] - timeRange[v]));
-
-        int[] sortedTravelTimes = travelTime.clone();
-        Arrays.sort(sortedTravelTimes);
+//        int[] sortedTravelTimes = travelTime.clone();
+//        Arrays.sort(sortedTravelTimes);
 
         int[] carR = new int[n];
         int[] carC = new int[n];
         int[] carBecomesFree = new int[n];
         int[] timeToReach = new int[n];
-        for (int rideIt = 0; rideIt < k; rideIt++) {
-            int id = rideOrder[rideIt];
-            if (travelTime[id] < sortedTravelTimes[(int)(k * 0.02)]) {
-//                continue;
-            }
-            List<Integer> candidates = new ArrayList<>();
+        int score = calcScore();
+
+        for (int step = 0; step < 50; step++) {
+            Integer[] oldOrder = rideOrder.clone();
+            List<Integer>[] oldAssignment = new List[n];
             for (int i = 0; i < n; i++) {
-                int sectorR = getSector(sr[id], height);
-                int sectorC = getSector(sc[id], width);
-                int carSectorR = getSector(carR[i], height);
-                int carSectorC = getSector(carC[i], width);
-//                if (i % 4 != 2 * sectorR + sectorC) {
-                if (carSectorR != sectorR || carSectorC != sectorC) {
-//                    continue;
-                }
-
-                timeToReach[i] = carBecomesFree[i] + dist(carR[i], carC[i], sr[id], sc[id]);
-                if (timeToReach[i] + travelTime[id] <= latestFinish[id]) {
-                    candidates.add(i);
+                oldAssignment[i] = new ArrayList<>(assignment[i]);
+                assignment[i].clear();
+            }
+            if (step == 0) {
+                Arrays.sort(rideOrder, (u, v) -> (earliestStart[u] - earliestStart[v]));
+            } else if (step == 1) {
+                Arrays.sort(rideOrder, (u, v) -> (latestStart[u] - latestStart[v]));
+            } else {
+                for (int i = 0; i < k; i++) {
+                    int j = random.nextInt(i + 1);
+                    int t = rideOrder[i];
+                    rideOrder[i] = rideOrder[j];
+                    rideOrder[j] = t;
                 }
             }
-            if (candidates.isEmpty()) {
-                continue;
+
+            for (int rideIt = 0; rideIt < k; rideIt++) {
+                int id = rideOrder[rideIt];
+                List<Integer> candidates = new ArrayList<>();
+                for (int i = 0; i < n; i++) {
+                    timeToReach[i] = carBecomesFree[i] + dist(carR[i], carC[i], sr[id], sc[id]);
+                    if (timeToReach[i] + travelTime[id] <= latestFinish[id]) {
+                        candidates.add(i);
+                    }
+                }
+                if (candidates.isEmpty()) {
+                    continue;
+                }
+
+                Collections.sort(candidates, (u, v) -> (timeToReach[u] - timeToReach[v]));
+                int i = candidates.get(0);
+                assignment[i].add(id);
+                int t = Math.max(earliestStart[id], carBecomesFree[i] + dist(carR[i], carC[i], sr[id], sc[id]));
+                carBecomesFree[i] = t + travelTime[id];
+                carR[i] = fr[id];
+                carC[i] = fc[id];
             }
 
-//            Collections.sort(candidates, (u, v) -> (carBecomesFree[u] - carBecomesFree[v]));
-            Collections.sort(candidates, (u, v) -> (timeToReach[u] - timeToReach[v]));
-//            int i = candidates.get(random.nextInt(candidates.size()));
-            int i = candidates.get(0);
-            assignment[i].add(id);
-            int t = Math.max(earliestStart[id], carBecomesFree[i] + dist(carR[i], carC[i], sr[id], sc[id]));
-//            System.out.println(carBecomesFree[i] + " " + (t + travelTime[id]));
-            carBecomesFree[i] = t + travelTime[id];
-            carR[i] = fr[id];
-            carC[i] = fc[id];
+            int nScore = calcScore();
+            if (score < nScore) {
+                score = nScore;
+            } else {
+                rideOrder = oldOrder;
+                assignment = oldAssignment;
+            }
         }
 
         for (int i = 0; i < n; i++) {

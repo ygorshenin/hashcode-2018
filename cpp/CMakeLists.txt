@@ -5,6 +5,8 @@ project(SelfDrivingRides)
 option(USE_PPROF OFF)
 option(USE_ASAN OFF)
 
+find_package(gflags REQUIRED)
+
 add_definitions(-DHOME)
 if (USE_PPROF)
   add_definitions(-DUSE_PPROF)
@@ -23,6 +25,8 @@ if (USE_ASAN)
 endif()
 
 add_executable(solution solution.cpp)
+
+target_link_libraries(solution "-lpthread" gflags)
 
 if (USE_PPROF)
   target_link_libraries(solution "-lprofiler")

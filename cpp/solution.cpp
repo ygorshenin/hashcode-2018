@@ -1,15 +1,26 @@
 #include <algorithm>
 #include <cassert>
+#include <cstdint>
 #include <iomanip>
 #include <iostream>
 #include <numeric>
 #include <random>
+#include <utility>
 #include <vector>
 
+#include <gflags/gflags.h>
 #include <sys/time.h>
 using namespace std;
 
-mt19937 g_engine{42};
+DEFINE_int32(pre_limit_sec, 10, "Preliminary time limit in seconds");
+DEFINE_int32(post_limit_sec, 10, "Post time limit in seconds");
+
+struct Context {
+  Context() = default;
+  Context(int seed) : m_engine(seed) {}
+
+  mt19937 m_engine;
+};
 
 double GetTimeMs() {
   timeval tv;
@@ -56,8 +67,8 @@ istream& operator>>(istream& is, Ride& ride) {
 }
 
 struct Problem {
-  double CalcUpperBound() const {
-    double energy = 0;
+  int64_t CalcUpperBound() const {
+    int64_t energy = 0;
     for (auto const& ride : m_rides)
       energy += ride.Length() + m_bonus;
     return energy;
@@ -90,8 +101,11 @@ istream& operator>>(istream& is, Problem& problem) {
 }
 
 struct Solution {
-  explicit Solution(Problem const& problem)
+  Solution() = default;
+
+  Solution(Problem const& problem, Context& context)
       : m_problem(&problem),
+        m_context(&context),
         m_assignment(m_problem->m_numVehicles),
         m_energies(m_problem->m_numVehicles) {
     InitRandom();
@@ -103,39 +117,37 @@ struct Solution {
 
     vector<int> rides(m_problem->m_numRides);
     iota(rides.begin(), rides.end(), 0);
-    shuffle(rides.begin(), rides.end(), g_engine);
+    shuffle(rides.begin(), rides.end(), m_context->m_engine);
 
     for (const auto& ride : rides) {
-      int const vehicle = uid(g_engine);
+      int const vehicle = uid(m_context->m_engine);
       m_assignment[vehicle].push_back(ride);
     }
   }
 
-  double CalcEnergy() const {
-    double energy = 0;
+  int64_t CalcEnergy() const {
+    int64_t energy = 0;
     for (int vehicle = 0; vehicle < m_problem->m_numVehicles; ++vehicle)
       energy += CalcEnergy(vehicle);
     return energy;
   }
 
-  double UpdateEnergy() {
-    double energy = 0;
+  int64_t UpdateEnergy() {
+    int64_t energy = 0;
     for (int vehicle = 0; vehicle < m_problem->m_numVehicles; ++vehicle)
       energy += UpdateEnergy(vehicle);
     m_energy = energy;
     return energy;
   }
 
-  double UpdateEnergy(int vehicle) {
+  int64_t UpdateEnergy(int vehicle) {
     assert(vehicle < m_problem->m_numVehicles);
     assert(m_energies.size() == m_problem->m_numVehicles);
 
-    double const energy = CalcEnergy(vehicle);
-    m_energies[vehicle] = energy;
-    return energy;
+    return m_energies[vehicle] = CalcEnergy(vehicle);
   }
 
-  double CalcEnergy(int vehicle) const {
+  int64_t CalcEnergy(int vehicle) const {
     assert(vehicle < m_problem->m_numVehicles);
     assert(m_assignment.size() == m_problem->m_numVehicles);
 
@@ -143,7 +155,7 @@ struct Solution {
 
     Cell curr(0, 0);
     int time = 0;
-    double totalEnergy = 0;
+    int64_t totalEnergy = 0;
 
     for (auto const& r : m_assignment[vehicle]) {
       assert(r < rides.size());
@@ -152,7 +164,7 @@ struct Solution {
       int const arrival = time + Distance(curr, ride.m_source);
       int const start = max(arrival, ride.m_earliestStart);
 
-      double energy = 0;
+      int64_t energy = 0;
       if (start == ride.m_earliestStart)
         energy += m_problem->m_bonus;
       if (start <= ride.m_latestStart)
@@ -169,10 +181,11 @@ struct Solution {
   }
 
   Problem const* m_problem;
+  Context* m_context;
   vector<vector<int>> m_assignment;
 
-  vector<double> m_energies;
-  double m_energy = 0;
+  vector<int64_t> m_energies;
+  int64_t m_energy = 0;
 };
 
 ostream& operator<<(ostream& os, Solution const& solution) {
@@ -185,34 +198,51 @@ ostream& operator<<(ostream& os, Solution const& solution) {
   return os;
 }
 
-struct Move {
-  Move() = default;
-  Move(int vfrom,
-       int pfrom,
-       int vto,
-       int pto,
-       double delta,
-       double oldFromEnergy,
-       double oldToEnergy)
-      : m_vfrom(vfrom),
-        m_pfrom(pfrom),
-        m_vto(vto),
-        m_pto(pto),
-        m_delta(delta),
-        m_oldFromEnergy(oldFromEnergy),
-        m_oldToEnergy(oldToEnergy),
-        m_valid(true) {}
+struct Base {
+  virtual void Revert(Solution& curr) = 0;
 
-  void Revert(Solution& curr) {
-    if (m_vfrom == m_vto) {
-      auto& assignment = curr.m_assignment[m_vfrom];
-      assert(m_pfrom < assignment.size());
-      assert(m_pto < assignment.size());
-      swap(assignment[m_pfrom], assignment[m_pto]);
-      curr.m_energy -= m_delta;
-      curr.m_energies[m_vfrom] = m_oldFromEnergy;
+  int64_t m_delta = 0;
+  bool m_valid = false;
+};
+
+struct Invalid : public Base {
+  Invalid() { m_valid = false; }
+
+  void Revert(Solution& curr) override {}
+};
+
+struct Shift : public Base {
+  Shift() { m_valid = true; }
+
+  void Revert(Solution& curr) override {
+    if (m_from == m_to)
       return;
-    }
+
+    auto& assignment = curr.m_assignment[m_vehicle];
+    assert(curr.m_energies.size() == curr.m_assignment.size());
+    assert(m_from < assignment.size());
+    assert(m_to < assignment.size());
+
+    int const ride = assignment[m_to];
+
+    assignment.erase(assignment.begin() + m_to);
+    assignment.insert(assignment.begin() + m_from, ride);
+
+    curr.m_energy -= m_delta;
+    curr.m_energies[m_vehicle] = m_energy;
+  }
+
+  int m_vehicle = 0;
+  int m_from = 0;
+  int m_to = 0;
+  int64_t m_energy = 0;
+};
+
+struct Move : public Base {
+  Move() { m_valid = true; }
+
+  void Revert(Solution& curr) override {
+    assert(m_vfrom != m_vto);
 
     auto& afrom = curr.m_assignment[m_vfrom];
     auto& ato = curr.m_assignment[m_vto];
@@ -235,12 +265,8 @@ struct Move {
   int m_vto = 0;
   int m_pto = 0;
 
-  double m_delta = 0;
-
-  double m_oldFromEnergy = 0;
-  double m_oldToEnergy = 0;
-
-  bool m_valid = false;
+  int64_t m_oldFromEnergy = 0;
+  int64_t m_oldToEnergy = 0;
 };
 
 ostream& operator<<(ostream& os, Move const& move) {
@@ -248,24 +274,24 @@ ostream& operator<<(ostream& os, Move const& move) {
   os << move.m_pfrom << " ";
   os << move.m_vto << " ";
   os << move.m_pto << " ";
-  os << move.m_delta << " " << move.m_oldFromEnergy << " " << move.m_oldToEnergy
-     << " ";
+  os << move.m_delta << " " << move.m_oldFromEnergy << " " << move.m_oldToEnergy << " ";
   os << boolalpha << move.m_valid;
   return os;
 }
 
+template <bool ShiftsOnly>
 struct Generator {
-  explicit Generator(Problem const& problem)
-      : m_problem(problem), m_vehicleUID(0, m_problem.m_numVehicles - 1) {}
+  Generator(Problem const& problem, Context& context)
+      : m_problem(problem), m_context(context), m_vehicleUID(0, m_problem.m_numVehicles - 1) {}
 
-  Move Generate(Solution& curr) {
+  Base& Generate(Solution& curr) {
     int const kMaxRetries = m_problem.m_numVehicles;
 
     auto& assignment = curr.m_assignment;
 
     int vfrom = -1;
     for (int retry = 0; retry < kMaxRetries; ++retry) {
-      int u = m_vehicleUID(g_engine);
+      int u = m_vehicleUID(m_context.m_engine);
       if (!assignment[u].empty()) {
         vfrom = u;
         break;
@@ -273,41 +299,58 @@ struct Generator {
     }
 
     if (vfrom < 0)
-      return {};
+      return m_invalid;
 
-    int const vto = m_vehicleUID(g_engine);
-    int const pfrom = m_uid(g_engine) % assignment[vfrom].size();
+    int const pfrom = m_uid(m_context.m_engine) % assignment[vfrom].size();
 
-    int pto = 0;
-    if (vto == vfrom)
-      pto = m_uid(g_engine) % assignment[vto].size();
-    else
-      pto = m_uid(g_engine) % (assignment[vto].size() + 1);
+    if (ShiftsOnly) {
+      int const vto = vfrom;
+      int const pto = m_uid(m_context.m_engine) % assignment[vto].size();
+      return GenerateShift(curr, vfrom, pfrom, pto);
+    }
 
+    int const vto = m_vehicleUID(m_context.m_engine);
+
+    if (vfrom == vto) {
+      int const pto = m_uid(m_context.m_engine) % assignment[vto].size();
+      return GenerateShift(curr, vfrom, pfrom, pto);
+    }
+
+    int const pto = m_uid(m_context.m_engine) % (assignment[vto].size() + 1);
     return GenerateMove(curr, vfrom, pfrom, vto, pto);
   }
 
-  Move GenerateMove(Solution& curr, int vfrom, int pfrom, int vto, int pto) {
-    if (vfrom == vto) {
-      double const oldEnergy = curr.m_energy;
-      double const oldFromEnergy = curr.m_energies[vfrom];
+  Shift& GenerateShift(Solution& curr, int vehicle, int from, int to) {
+    auto const oldEnergy = curr.m_energy;
+    auto const oldFromEnergy = curr.m_energies[vehicle];
 
-      auto& assignment = curr.m_assignment[vfrom];
-      assert(pfrom < assignment.size());
-      assert(pto < assignment.size());
+    auto& assignment = curr.m_assignment[vehicle];
+    assert(from < assignment.size());
+    assert(to < assignment.size());
 
-      swap(assignment[pfrom], assignment[pto]);
-
-      curr.m_energy -= curr.m_energies[vfrom];
-      curr.UpdateEnergy(vfrom);
-      curr.m_energy += curr.m_energies[vfrom];
-      return Move(vfrom, pfrom, vto, pto, curr.m_energy - oldEnergy,
-                  oldFromEnergy, oldFromEnergy);
+    if (from != to) {
+      int const ride = assignment[from];
+      assignment.erase(assignment.begin() + from);
+      assignment.insert(assignment.begin() + to, ride);
+      curr.m_energy -= curr.m_energies[vehicle];
+      curr.UpdateEnergy(vehicle);
+      curr.m_energy += curr.m_energies[vehicle];
     }
 
-    double const oldEnergy = curr.m_energy;
-    double const oldFromEnergy = curr.m_energies[vfrom];
-    double const oldToEnergy = curr.m_energies[vto];
+    m_shift.m_vehicle = vehicle;
+    m_shift.m_from = from;
+    m_shift.m_to = to;
+    m_shift.m_delta = curr.m_energy - oldEnergy;
+    m_shift.m_energy = oldFromEnergy;
+    return m_shift;
+  }
+
+  Move& GenerateMove(Solution& curr, int vfrom, int pfrom, int vto, int pto) {
+    assert(vfrom != vto);
+
+    auto const oldEnergy = curr.m_energy;
+    auto const oldFromEnergy = curr.m_energies[vfrom];
+    auto const oldToEnergy = curr.m_energies[vto];
 
     curr.m_energy -= oldFromEnergy + oldToEnergy;
 
@@ -325,32 +368,48 @@ struct Generator {
     curr.UpdateEnergy(vto);
 
     curr.m_energy += curr.m_energies[vfrom] + curr.m_energies[vto];
-    return Move(vfrom, pfrom, vto, pto, curr.m_energy - oldEnergy,
-                oldFromEnergy, oldToEnergy);
+
+    m_move.m_vfrom = vfrom;
+    m_move.m_vto = vto;
+    m_move.m_pfrom = pfrom;
+    m_move.m_pto = pto;
+    m_move.m_delta = curr.m_energy - oldEnergy;
+    m_move.m_oldFromEnergy = oldFromEnergy;
+    m_move.m_oldToEnergy = oldToEnergy;
+    return m_move;
   }
 
   Problem const& m_problem;
+  Context& m_context;
   uniform_int_distribution<int> m_vehicleUID;
   uniform_int_distribution<int> m_uid;
+
+  Invalid m_invalid;
+  Shift m_shift;
+  Move m_move;
 };
 
 struct Solver {
-  Solver(Problem const& problem, double timeLimitMs)
-      : m_problem(problem), m_timeLimitMs(timeLimitMs) {}
+  Solver(Problem const& problem, Context& context, double timeLimitMs)
+      : m_problem(problem), m_context(context), m_timeLimitMs(timeLimitMs) {}
 
+  template <bool ShiftsOnly>
   Solution Solve() {
-    Generator generator(m_problem);
+    Solution curr(m_problem, m_context);
+    return Solve<ShiftsOnly>(curr);
+  }
 
-    Solution curr(m_problem);
+  template <bool ShiftsOnly>
+  Solution Solve(Solution curr) {
+    Generator<ShiftsOnly> generator(m_problem, m_context);
 
     Solution best = curr;
 
     double const startTimeMs = GetTimeMs();
     double currTimeMs = startTimeMs;
 
-    double const maxT =
-        (m_problem.m_numRows + m_problem.m_numCols + m_problem.m_bonus) * 4;
-    double const minT = 0.1;
+    double const maxT = ShiftsOnly ? 10 : (m_problem.m_numRows + m_problem.m_numCols + m_problem.m_bonus) * 8;
+    double const minT = 0.01;
     double currT = maxT;
 
     uint64_t iteration = 0;
@@ -363,9 +422,14 @@ struct Solver {
         currT = maxT * pow(minT / maxT, progress);
       }
 
-      auto move = generator.Generate(curr);
+      auto& move = generator.Generate(curr);
 
-      if (move.m_delta > 0 || m_urd(g_engine) < exp(move.m_delta / currT)) {
+      assert(curr.m_energy == curr.CalcEnergy());
+
+      if (!move.m_valid)
+        continue;
+
+      if (move.m_delta > 0 || m_urd(m_context.m_engine) < exp(static_cast<double>(move.m_delta) / currT)) {
         if (curr.m_energy > best.m_energy)
           best = curr;
       } else {
@@ -374,17 +438,20 @@ struct Solver {
     }
 
     cerr << "Iterations passed: " << iteration << endl;
-    assert(fabs(best.CalcEnergy() - best.m_energy) < 1e-6);
+    assert(best.CalcEnergy() == best.m_energy);
 
     return best;
   }
 
   Problem const& m_problem;
+  Context& m_context;
   double m_timeLimitMs = 0;
   uniform_real_distribution<double> m_urd;
 };
 
-int main() {
+int main(int argc, char* argv[]) {
+  gflags::ParseCommandLineFlags(&argc, &argv, true);
+
   ios_base::sync_with_stdio(false);
 
   Problem problem;
@@ -393,15 +460,23 @@ int main() {
   cerr << "Num vehicles: " << problem.m_numVehicles << endl;
   cerr << "Num rides: " << problem.m_numRides << endl;
 
-  double const bound = problem.CalcUpperBound();
+  int64_t const bound = problem.CalcUpperBound();
   cerr << "Bound: " << bound << endl;
 
-  Solver solver(problem, 60 * 1000 /* timeLimitMs */);
-  auto const solution = solver.Solve();
-  double const energy = solution.CalcEnergy();
+  double const preLimitMs = FLAGS_pre_limit_sec * 1000.0;
+  double const postLimitMs = FLAGS_post_limit_sec * 1000.0;
 
-  cerr << "Energy: " << energy << endl;
-  cerr << "Quality: " << energy / bound << endl;
-  cout << solution;
+  Context context{42};
+
+  Solver preSolver(problem, context, preLimitMs);
+  auto const preSolution = preSolver.Solve<false>();
+  cerr << "Pre-solution: " << preSolution.m_energy << endl;
+
+  Solver postSolver(problem, context, postLimitMs);
+  auto const postSolution = postSolver.Solve<true>(preSolution);
+
+  cerr << "Energy: " << postSolution.m_energy << endl;
+  cerr << "Quality: " << static_cast<double>(postSolution.m_energy) / bound << endl;
+  cout << postSolution;
   return 0;
 }

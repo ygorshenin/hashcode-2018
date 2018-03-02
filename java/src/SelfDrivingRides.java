@@ -162,29 +162,86 @@ class SelfDrivingRides {
         }
 
 
-        for (int i = 0; i < n; i++) {
+        List<Integer> unassigned = new ArrayList<>();
+        {
+            boolean[] dead = new boolean[k];
+            for (int i = 0; i < n; i++) {
+                for (int id : assignment[i]) {
+                    dead[id] = true;
+                }
+            }
+
+            for (int id = 0; id < k; id++) {
+                if (!dead[id]) {
+                    unassigned.add(id);
+                }
+            }
+        }
+
+        long startTime = System.currentTimeMillis();
+        double t = 0;
+        int i = 0;
+        for (int step = 0;; step++) {
+            if ((step & 4096) == 0) {
+                t = (System.currentTimeMillis() - startTime) / 20000.0;
+            }
+            if (t > 1) {
+                break;
+            }
+            ++i;
+            if (i == n) {
+                i = 0;
+            }
             if (assignment[i].size() <= 1) {
                 continue;
             }
+            if (unassigned.isEmpty()) {
+                break;
+            }
             int sc = calcCarScore(i);
-            for (int it = 0; it < 1000; it++) {
+            for (int it = 0; it < 10; it++) {
                 int u = random.nextInt(assignment[i].size());
-                int v = random.nextInt(assignment[i].size());
+                int v = random.nextInt(unassigned.size());
                 if (u == v) {
                     continue;
                 }
                 int au = assignment[i].get(u);
-                int av = assignment[i].get(v);
+                int av = unassigned.get(v);
                 assignment[i].set(u, av);
-                assignment[i].set(v, au);
                 int nsc = calcCarScore(i);
-                if (sc < nsc) {
+                if (sc < nsc || sc - nsc < random.nextDouble() * (1 - t) * 1e1) {
                     sc = nsc;
+                    unassigned.remove(v);
+                    unassigned.add(au);
                 } else {
                     assignment[i].set(u, au);
-                    assignment[i].set(v, av);
                 }
             }
+            removeUnreachable(i, unassigned);
+        }
+    }
+
+    private void removeUnreachable(int i, List<Integer> unassigned) {
+        int r = 0;
+        int c = 0;
+        int t = 0;
+        List<Integer> toRemove = new ArrayList<>();
+        for (int it = 0; it < assignment[i].size(); it++) {
+            int id = assignment[i].get(it);
+            int nt = Math.max(earliestStart[id], t + dist(r, c, sr[id], sc[id]));
+            if (nt + travelTime[id] > latestFinish[id]) {
+                toRemove.add(it);
+                unassigned.add(id);
+                continue;
+            }
+            t = nt + travelTime[id];
+            r = fr[id];
+            c = fc[id];
+        }
+
+        Collections.sort(toRemove);
+        for (int j = toRemove.size() - 1; j >= 0; j--) {
+            assignment[i].remove(toRemove.get(j));
         }
     }
 
@@ -217,6 +274,7 @@ class SelfDrivingRides {
     }
 
     private int calcScore() {
+        statsNumBonuses = 0;
         int res = 0;
         for (int i = 0; i < n; i++) {
             res += calcCarScore(i);
@@ -226,19 +284,19 @@ class SelfDrivingRides {
 
     private int calcCarScore(int i) {
         int res = 0;
-        statsNumBonuses = 0;
         int r = 0;
         int c = 0;
         int t = 0;
         for (int id : assignment[i]) {
             int nt = Math.max(earliestStart[id], t + dist(r, c, sr[id], sc[id]));
+            if (nt + travelTime[id] > latestFinish[id]) {
+//                return -infinity;
+//                throw new AssertionError(nt);
+                continue;
+            }
             if (nt == earliestStart[id]) {
                 res += bonus;
                 ++statsNumBonuses;
-            }
-            if (nt + travelTime[id] > latestFinish[id]) {
-                return -infinity;
-//                throw new AssertionError(nt);
             }
             t = nt + travelTime[id];
             r = fr[id];

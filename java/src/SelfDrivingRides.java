@@ -16,6 +16,7 @@ class SelfDrivingRides {
     int[] latestFinish;
     int[] travelTime;
     int[] timeRange;
+    int[] earliestFinish;
     List<Integer>[] assignment;
     int statsNumBonuses;
     Random random = new Random(0);
@@ -76,6 +77,8 @@ class SelfDrivingRides {
                     Arrays.sort(rideOrder, (u, v) -> (latestStart[u] - latestStart[v]));
                 } else if (step == 2) {
                     Arrays.sort(rideOrder, (u, v) -> -(travelTime[u] - travelTime[v]));
+                } else if (step == 3) {
+                    Arrays.sort(rideOrder, (u, v) -> (earliestFinish[u] - earliestFinish[v]));
                 } else {
                     for (int i = 0; i < k; i++) {
                         int j = random.nextInt(i + 1);
@@ -182,8 +185,8 @@ class SelfDrivingRides {
         double t = 0;
         int i = 0;
         for (int step = 0;; step++) {
-            if ((step & 4096) == 0) {
-                t = (System.currentTimeMillis() - startTime) / 20000.0;
+            if ((step & 4095) == 0) {
+                t = (System.currentTimeMillis() - startTime) / 300000.0;
             }
             if (t > 1) {
                 break;
@@ -192,29 +195,54 @@ class SelfDrivingRides {
             if (i == n) {
                 i = 0;
             }
-            if (assignment[i].size() <= 1) {
-                continue;
-            }
-            if (unassigned.isEmpty()) {
-                break;
-            }
             int sc = calcCarScore(i);
-            for (int it = 0; it < 10; it++) {
-                int u = random.nextInt(assignment[i].size());
-                int v = random.nextInt(unassigned.size());
-                if (u == v) {
+            for (int it = 0; it < 20; it++) {
+                if (assignment[i].isEmpty()) {
                     continue;
                 }
-                int au = assignment[i].get(u);
-                int av = unassigned.get(v);
-                assignment[i].set(u, av);
-                int nsc = calcCarScore(i);
-                if (sc < nsc || sc - nsc < random.nextDouble() * (1 - t) * 1e1) {
-                    sc = nsc;
-                    unassigned.remove(v);
-                    unassigned.add(au);
-                } else {
-                    assignment[i].set(u, au);
+                if (unassigned.isEmpty()) {
+                    break;
+                }
+                int move = random.nextInt(3);
+                if (move == 0) {
+                    int u = random.nextInt(assignment[i].size());
+                    int v = random.nextInt(unassigned.size());
+                    int au = assignment[i].get(u);
+                    int av = unassigned.get(v);
+                    assignment[i].set(u, av);
+                    int nsc = calcCarScore(i);
+                    if (sc < nsc || sc - nsc < random.nextDouble() * (1 - t) * 1e1) {
+                        sc = nsc;
+                        unassigned.remove(v);
+                        unassigned.add(au);
+                    } else {
+                        assignment[i].set(u, au);
+                    }
+                }
+                if (move == 1) {
+                    int u = random.nextInt(assignment[i].size());
+                    int v = random.nextInt(unassigned.size());
+                    int av = unassigned.get(v);
+                    assignment[i].add(u, av);
+                    int nsc = calcCarScore(i);
+                    if (sc < nsc || sc - nsc < random.nextDouble() * (1 - t) * 1e1) {
+                        sc = nsc;
+                        unassigned.remove(v);
+                    } else {
+                        assignment[i].remove(u);
+                    }
+                }
+                if (move == 2) {
+                    int u = random.nextInt(assignment[i].size());
+                    int au = assignment[i].get(u);
+                    assignment[i].remove(u);
+                    int nsc = calcCarScore(i);
+                    if (sc < nsc || sc - nsc < random.nextDouble() * (1 - t) * 1e1) {
+                        sc = nsc;
+                        unassigned.add(au);
+                    } else {
+                        assignment[i].add(u, au);
+                    }
                 }
             }
             removeUnreachable(i, unassigned);
@@ -225,24 +253,21 @@ class SelfDrivingRides {
         int r = 0;
         int c = 0;
         int t = 0;
-        List<Integer> toRemove = new ArrayList<>();
+        List<Integer> reachable = new ArrayList<>();
         for (int it = 0; it < assignment[i].size(); it++) {
             int id = assignment[i].get(it);
             int nt = Math.max(earliestStart[id], t + dist(r, c, sr[id], sc[id]));
             if (nt + travelTime[id] > latestFinish[id]) {
-                toRemove.add(it);
                 unassigned.add(id);
                 continue;
             }
+            reachable.add(id);
             t = nt + travelTime[id];
             r = fr[id];
             c = fc[id];
         }
 
-        Collections.sort(toRemove);
-        for (int j = toRemove.size() - 1; j >= 0; j--) {
-            assignment[i].remove(toRemove.get(j));
-        }
+        assignment[i] = reachable;
     }
 
     private int dist(int r1, int c1, int r2, int c2) {
@@ -333,6 +358,7 @@ class SelfDrivingRides {
         latestFinish = new int[k];
         travelTime = new int[k];
         timeRange = new int[k];
+        earliestFinish = new int[k];
         for (int i = 0; i < k; i++) {
             sr[i] = in.nextInt();
             sc[i] = in.nextInt();
@@ -342,6 +368,7 @@ class SelfDrivingRides {
             latestFinish[i] = in.nextInt();
             travelTime[i] = dist(sr[i], sc[i], fr[i], fc[i]);
             timeRange[i] = latestFinish[i] - earliestStart[i];
+            earliestFinish[i] = earliestStart[i] + travelTime[i];
         }
     }
 
